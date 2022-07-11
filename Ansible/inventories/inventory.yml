@@ -1,0 +1,12 @@
+all:
+  hosts:
+    serveripa:
+      ansible_host: 192.168.56.10
+      ansible_port: 22
+      ansible_private_key_file: .vagrant/machines/serveripa/virtualbox/private_key  
+
+    clientipa:
+      ansible_host: 192.168.56.20
+      ansible_port: 22
+      ansible_private_key_file: .vagrant/machines/clientipa/virtualbox/private_key
+

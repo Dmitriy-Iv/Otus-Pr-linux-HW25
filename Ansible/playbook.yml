@@ -1,0 +1,139 @@
+---
+- hosts: all
+  #gather_facts: no
+  become: true
+  tasks:
+
+#################################  Install soft   ##########################################
+  - name: Install EPEL Repo package from standart repo
+    yum:
+      name: epel-release
+      state: present
+  
+  - name: Set timezone to Europe/Moscow
+    timezone: name=Europe/Moscow
+    
+  - name: Stop and disable firewalld.
+    service:
+      name: firewalld
+      state: stopped
+      enabled: False
+
+  - name: Upgrade all packages
+    ansible.builtin.yum:
+      name: '*'
+      state: latest
+
+  - name: install soft
+    yum:
+      name: 
+        - nano
+        - net-tools
+        - bind-utils
+        - ntp
+      state: latest
+      update_cache: true
+
+#################################  Config  serveripa   ##########################################
+- hosts: serveripa
+  become: true
+  tasks:
+
+  - name: copy file hosts to the serveripa
+    template: src=server-hosts.j2 dest=/etc/hosts owner=root group=root mode=0644
+
+  - name: set-hostname on serveripa
+    command: hostnamectl set-hostname serveripa.ipa.test
+
+  - name: install soft serveripa
+    yum:
+      name: 
+        - ipa-server
+        - ipa-server-dns
+      state: latest
+      update_cache: true
+
+  - name: ipa-server-install on serveripa
+    command: | 
+      ipa-server-install -U --hostname=serveripa.ipa.test -r ipa.test \
+      -n ipa.test -p pass1234 -a pass1234 --setup-dns --no-forwarders --no-reverse      
+
+  tags:
+    - server
+#################################  Config  clientipa   ##########################################
+- hosts: clientipa
+  become: true
+  tasks:
+
+  - name: install soft clientipa
+    yum:
+      name:
+      - freeipa-client
+      state: latest
+      update_cache: true
+
+  - name: delete /etc/resolv.conf
+    file:
+      path: /etc/resolv.conf
+      state: absent 
+
+  - name: copy resolv.conf to the clientipa
+    copy: 
+      src: templates/client-resolv.conf
+      dest: /etc/resolv.conf
+      owner: root
+      group: root
+      mode: 0644   
+
+  - name: set-hostname on clientipa
+    command: hostnamectl set-hostname clientipa.ipa.test
+
+  - name: restart network service on centralServer
+    service:
+      name: network
+      state: restarted
+
+  - name: copy server.conf file
+    template:
+      src: client-resolv.j2 
+      dest: /etc/resolv.conf
+      owner: root
+      group: root
+      mode: 0644        
+
+  - name: ipa-client-install on clientipa
+    command: ipa-client-install -U -p admin -w pass1234
+
+  - ipa_user:
+      name: "{{ item.name }}"
+      state: present
+      givenname: "{{ item.name }}"
+      sn: "{{ item.surname}}"
+      password: zounds
+      ipa_host: serveripa.ipa.test
+      ipa_user: admin
+      ipa_pass: pass1234
+      update_password: on_create
+    loop:
+      - { name: 'petya', surname: 'ivanov' }
+      - { name: 'vasya', surname: 'sidorov' }
+    tags:
+      - user
+
+  - ipa_group:
+      name: manager
+      user:
+      - petya
+      - vasya
+      ipa_host: serveripa.ipa.test
+      ipa_user: admin
+      ipa_pass: pass1234
+    tags:
+      - group      
+
+  tags:
+    - client\
+
+
+
+
